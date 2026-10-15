@@ -1,0 +1,58 @@
+name = "central-analytics-api"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+# Cloudflare git-build runs `npx wrangler deploy`; wrangler executes this [build]
+# command FIRST, which builds the React dashboard into ../frontend/dist so the
+# [assets] directory exists in the CI checkout (dist/ is gitignored, so it is not
+# in git). Skipped during `wrangler dev` (see build-frontend.mjs). In the Cloudflare
+# build settings only set Root directory = central-dashboard/backend-worker; leave
+# the Build command field empty (this [build] section handles it).
+[build]
+command = "node build-frontend.mjs"
+
+# Cloudflare-native analytics API backend.
+# NO D1, NO R2, NO database - data fetch thay Cloudflare GraphQL/REST API mathi.
+#
+# Secrets (kabhi repo/frontend ma navi - wrangler secret put thi aapelo):
+#   npx wrangler secret put CF_ACCOUNT_ID      # dash.cloudflare.com right sidebar
+#   npx wrangler secret put CF_API_TOKEN       # niche na permissions sathe token
+#   npx wrangler secret put DASHBOARD_PASSWORD # Basic Auth password (local dev: .dev.vars ma)
+#
+# Optional var:
+[vars]
+# "true" hoy to backend darek NON-track request par HTTP Basic Auth check kare
+# (username koi pan, password = DASHBOARD_PASSWORD secret). Cloudflare Access vapraati nahi.
+REQUIRE_ACCESS = "true"
+# Analytics queries nu cache TTL (seconds). Resource lists aa thi moti cache thay shake.
+# Live mode short polling kare etle TTL motu rakhiye ke poll par fresh data aave.
+CACHE_TTL = "30"
+# User Journey tracking mate: comma-separated site origins je POST /api/track karva shake
+# (e.g. "https://a.com,https://b.com"). Khali = koi pan origin (local dev mate j).
+ALLOWED_ORIGINS = ""
+
+# User Journey / custom activity -> Workers Analytics Engine.
+# Dataset AUTO-CREATES on first write (dashboard ma manually banavvi padhe nahi).
+# WRITE path: env.AE.writeDataPoint(...) is authorized by THIS binding at deploy
+#   time and does NOT use CF_API_TOKEN (Cloudflare has no "Analytics Engine Write"
+#   token scope - it does not exist). READ path (dashboard queries) calls
+#   /accounts/{id}/analytics_engine/sql with CF_API_TOKEN, which needs only
+#   Account > Account Analytics > Read.
+[[analytics_engine_datasets]]
+binding = "AE"
+dataset = "user_journey"
+
+# Dashboard UI (React build) served from THIS Worker -> same origin as the API, so
+# Basic Auth covers the whole site. run_worker_first=true makes the Worker gate asset
+# requests too (it calls env.ASSETS.fetch for non-/api paths). Rebuild the frontend
+# with VITE_API_BASE="" (relative) before deploy so its /api calls stay same-origin.
+[assets]
+directory = "../frontend/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+# Custom domain lagavva hoy to Cloudflare dashboard -> Triggers -> Custom Domain.
+# Dashboard ne ab Cloudflare Access (Zero Trust) joie nathi - HTTP Basic Auth
+# (DASHBOARD_PASSWORD secret) darek read/admin route ne protect kare; mate no card /
+# seat limit / Zero Trust setup nathi. POST /api/track public rahe (auth lagu nathi).

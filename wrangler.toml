@@ -1,0 +1,39 @@
+# Cloudflare git-build entry point.
+#
+# The Workers build settings currently use Root directory = "/" and Deploy command
+# = `npx wrangler deploy`, so wrangler runs from the REPO ROOT and needs a config
+# HERE. This mirrors central-dashboard/backend-worker/wrangler.toml but with
+# repo-root-relative paths. Keep the two in sync (name / bindings / vars / dataset).
+# Local dev and manual deploys from the backend-worker folder still use that file.
+#
+# Secrets (CF_ACCOUNT_ID, CF_API_TOKEN, DASHBOARD_PASSWORD) are set on the Worker
+# via `wrangler secret put` and persist across git deploys - they are NOT here.
+name = "central-analytics-api"
+main = "central-dashboard/backend-worker/src/index.js"
+compatibility_date = "2026-01-01"
+
+# Build the React dashboard into central-dashboard/frontend/dist before upload
+# (dist/ is gitignored, so CI must produce it). Wrangler runs this [build] command
+# as part of `wrangler deploy`; build-frontend.mjs skips it during `wrangler dev`.
+[build]
+command = "node central-dashboard/backend-worker/build-frontend.mjs"
+
+[vars]
+# "true" -> enforce HTTP Basic Auth on every non-/api/track request (see src/auth.js).
+REQUIRE_ACCESS = "true"
+# Analytics read cache TTL (seconds).
+CACHE_TTL = "30"
+# Comma-separated site origins allowed to POST /api/track. Empty = allow all.
+ALLOWED_ORIGINS = ""
+
+# User Journey store -> Workers Analytics Engine (auto-creates on first write).
+[[analytics_engine_datasets]]
+binding = "AE"
+dataset = "user_journey"
+
+# Dashboard UI (React build) served from this Worker -> same origin as the API.
+[assets]
+directory = "central-dashboard/frontend/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true

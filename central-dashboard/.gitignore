@@ -1,0 +1,8 @@
+# local secrets - kabhi commit nathi
+.dev.vars
+.env
+
+# build / deps
+node_modules/
+dist/
+.wrangler/
