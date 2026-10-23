@@ -15,6 +15,7 @@
  */
 
 import { checkBasicAuth } from "./auth.js";
+import { parseUserAgent } from "./useragent.js";
 import { getAccount, buildInventory, listZones, listAccounts } from "./cloudflare.js";
 import {
   fetchOverview,
@@ -443,6 +444,10 @@ async function handleTrack(request, env, cors) {
   const rawTs = Number(body.ts);
   if (!Number.isFinite(rawTs) || rawTs <= 0) return json({ success: false, error: "invalid timestamp" }, 400, cors);
 
+  // Parse the visitor's User-Agent SERVER-side (the snippet sends the raw header
+  // value) so the Visitors/Sessions pages can show browser/OS/device per user.
+  const ua = parseUserAgent(tstr(body.ua, 512));
+
   const ok = writeEvent(env, {
     event,
     project: tstr(body.p, 120) || "default",
@@ -452,6 +457,9 @@ async function handleTrack(request, env, cors) {
     country: (request.cf && request.cf.country) || "XX",
     visitorId,
     sessionId,
+    browser: ua.browser,
+    os: ua.os,
+    device: ua.device,
     duration: tnum(body.dur),
     clientTs: rawTs,
   });

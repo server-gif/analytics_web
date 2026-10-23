@@ -6,6 +6,7 @@ import DataTable from "../components/DataTable.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { ErrorState, Empty } from "../components/StateViews.jsx";
 import { PageSkeleton } from "../components/Skeleton.jsx";
+import { UserCell, TravelPath, deviceLabel } from "../components/JourneyBits.jsx";
 import { fmtNumber, fmtDate } from "../lib/format.js";
 
 function fmtSec(s) {
@@ -14,13 +15,16 @@ function fmtSec(s) {
   return n < 60 ? `${n}s` : `${Math.floor(n / 60)}m ${n % 60}s`;
 }
 
-// Session list + drill-down timeline (custom-tracked via Analytics Engine).
+// One row per visit (session) - WHO visited (user + device), HOW MUCH they
+// read (pages, active time), and a drill-down showing the exact page-to-page
+// travel path. Custom-tracked via analytics.js / Workers Analytics Engine.
 export default function Sessions() {
   const f = useFilters();
   const deps = [f.account, f.project, f.domain, f.preset, f.from, f.to, f.visitor, f.session, f.path, f.event];
   const params = { account: f.account, project: f.project, domain: f.domain, preset: f.preset, from: f.from, to: f.to, visitor: f.visitor, session: f.session, path: f.path, event: f.event };
 
   const [sel, setSel] = useState(null);
+  const [showRaw, setShowRaw] = useState(false);
   const list = useApi(() => api.sessions(params), deps);
   const detail = useApi(
     () => (sel ? api.sessionDetail({ ...params, id: sel }) : Promise.resolve(null)),
@@ -39,24 +43,35 @@ export default function Sessions() {
         badge="custom tracked"
         items={[
           "Each row is one visit, custom-tracked by analytics.js via Workers Analytics Engine (not Cloudflare request counts).",
+          "User = that visit's anonymous browser/device ID (colored chip, stable across pages); Device = browser · OS parsed server-side from the User-Agent ('—' = visit tracked before this field existed).",
           "Started/Ended come from activity plus a 30-minute inactivity timeout - Cloudflare has no exact 'exit' event, so the end is the last activity.",
+          "Sorted by NEWEST activity first: the list re-orders on every Live refresh, so a session that just received an event moves to (and stays at) the top.",
           "Pages = page_view count; Duration = sum of active (tab-visible) time, not wall-clock.",
-          "Click a session to open its event timeline. Scope follows the filter bar (Account, Project, Domain). Times shown in IST.",
+          "Click a session to see the page-to-page TRAVEL PATH (order + active time per page) and, on demand, the raw event timeline. Scope follows the filter bar. Times in IST.",
           "Rolling 30-day window.",
         ]}
       />
-      <p className="foot" style={{ marginTop: "-8px", marginBottom: 18 }}>Session start/end derived from activity + the 30-min inactivity timeout (not a client exit event). Rolling 30-day window. Click a row for the timeline.</p>
+      <p className="foot" style={{ marginTop: "-8px", marginBottom: 18 }}>Session start/end derived from activity + the 30-min inactivity timeout (not a client exit event). Rolling 30-day window. Click a row for the travel path.</p>
       {rows == null ? (
         <Empty text="Session data unavailable right now (Analytics Engine query failed or not verified yet)." />
       ) : (
         <DataTable
           rows={rows}
           rowKey={(r) => r.sessionId}
-          onRowClick={(r) => setSel(r.sessionId)}
+          onRowClick={(r) => { setSel(r.sessionId === sel ? null : r.sessionId); setShowRaw(false); }}
           isSelected={(r) => r.sessionId === sel}
           emptyText="No tracked sessions yet. Install analytics.js and complete Phase 0/1."
           columns={[
+            { key: "endedAt", label: "Last activity", hint: "Most recent event in the session (IST). Sessions are ordered newest-activity first, so a live session jumps to / stays at the top as it updates.", render: (r) => fmtDate(r.endedAt) },
             { key: "startedAt", label: "Started", hint: "First activity of the session (IST).", render: (r) => fmtDate(r.startedAt) },
+            {
+              key: "visitorId", label: "User", hint: "Anonymous browser/device ID of this visit. Same color = same user on the Visitors page.",
+              render: (r) => <UserCell id={String(r.visitorId || "").slice(0, 8)} full={r.visitorId} />,
+            },
+            {
+              key: "device", label: "Device / browser", hint: "Browser · OS (+ device when not Desktop) parsed from the User-Agent. '—' = tracked before this field existed.",
+              render: (r) => deviceLabel(r) || "—",
+            },
             { key: "country", label: "Country", render: (r) => r.country || "—" },
             { key: "domain", label: "Domain", render: (r) => r.domain || "—" },
             { key: "pageViews", label: "Pages", align: "right", hint: "Number of page_view events in the session.", render: (r) => fmtNumber(r.pageViews) },
@@ -69,21 +84,31 @@ export default function Sessions() {
       {sel && (
         <div className="card" style={{ marginTop: 20 }}>
           <h3>
-            Session timeline <span className="sub"><code>{String(sel).slice(0, 12)}</code></span>
-            <button className="chip more" style={{ marginLeft: 12 }} onClick={() => setSel(null)}>close</button>
+            Session travel path <span className="sub"><code>{String(sel).slice(0, 12)}</code></span>
+            <button
+              className="chip more" style={{ marginLeft: 12 }}
+              onClick={() => setShowRaw((v) => !v)}
+              title="Toggle between the readable page-to-page path and every raw tracked event"
+            >
+              {showRaw ? "show travel path" : "show raw events"}
+            </button>
+            <button className="chip more" style={{ marginLeft: 8 }} onClick={() => setSel(null)}>close</button>
           </h3>
           {detail.loading ? <p className="state loading">Loading…</p> : detail.error ? <ErrorState message={detail.error} /> : (
-            !detail.data?.available ? <Empty text="Session detail unavailable (query failed or not verified yet)." /> : (
+            !detail.data?.available ? <Empty text="Session detail unavailable (query failed or not verified yet)." /> : showRaw ? (
               <DataTable
                 rows={detail.data.rows || []}
+                pageSize={0}
                 emptyText="No events for this session."
                 columns={[
                   { key: "timestamp", label: "Time", render: (e) => fmtDate(e.timestamp) },
-                  { key: "event", label: "Event", render: (e) => <span className="badge">{e.event}</span> },
+                  { key: "event", label: "Event", hint: "page_view = opened a page; page_duration = active time on it; navigation = in-page route change; session_activity = 30s 'still here' heartbeat.", render: (e) => <span className="badge">{e.event}</span> },
                   { key: "path", label: "Path", render: (e) => e.path || "—" },
                   { key: "duration", label: "Active time", align: "right", render: (e) => (e.duration ? fmtSec(e.duration) : "—") },
                 ]}
               />
+            ) : (
+              <TravelPath rows={detail.data.rows || []} max={50} />
             )
           )}
         </div>

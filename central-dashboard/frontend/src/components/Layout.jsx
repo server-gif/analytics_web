@@ -35,6 +35,7 @@ const NAV_GROUPS = [
     items: [
       ["Journey", "/journey", "journey"],
       ["Sessions", "/sessions", "sessions"],
+      ["Users", "/users", "user"],
       ["Visitors", "/visitors", "visitors"],
       ["Visited Pages", "/visited-pages", "visited"],
       ["Navigation", "/flow", "navigation"],

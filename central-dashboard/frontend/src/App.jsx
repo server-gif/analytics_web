@@ -19,6 +19,7 @@ import Sessions from "./pages/Sessions.jsx";
 import VisitedPages from "./pages/VisitedPages.jsx";
 import Navigation from "./pages/Navigation.jsx";
 import Visitors from "./pages/Visitors.jsx";
+import Users from "./pages/Users.jsx";
 
 // Filter state (project / domain / date) URL query param mathi aavte - refresh/
 // share thathu rahe. Layout ma aa state set thay.
@@ -75,6 +76,7 @@ export default function App() {
           <Route path="sessions" element={<Sessions />} />
           <Route path="visited-pages" element={<VisitedPages />} />
           <Route path="flow" element={<Navigation />} />
+          <Route path="users" element={<Users />} />
           <Route path="visitors" element={<Visitors />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

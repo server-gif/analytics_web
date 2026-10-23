@@ -290,7 +290,9 @@ Full rollout guide + code: **[`USER-JOURNEY.md`](./USER-JOURNEY.md)**.
   Account A and Account B do **not** each own a copy; all events pool into the central one.
   Each stored event preserves its source fields (actual schema): `event` (blob1),
   `project` (blob2), `domain` (blob3), `path` (blob4), `visitorId` (blob7),
-  `sessionId` (blob8), and client `timestamp` (double2).
+  `sessionId` (blob8), `browser` (blob9), `os` (blob10), `device` (blob11) - the last
+  three are parsed server-side from the posted User-Agent at /api/track (rows written
+  before this change simply show "—") - and client `timestamp` (double2).
 - **Account/project resolution:** the backend maps a tracked hostname to its project/account
   **at read time, using the discovered Cloudflare inventory**, scoped by the exact stored
   hostname (`blob3`). When a hostname resolves, journeys group under that project/account

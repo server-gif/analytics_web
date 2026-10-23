@@ -6,7 +6,7 @@ import DataTable from "../components/DataTable.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { ErrorState, Empty } from "../components/StateViews.jsx";
 import { PageSkeleton } from "../components/Skeleton.jsx";
-import { fmtNumber } from "../lib/format.js";
+import { fmtNumber, fmtDate } from "../lib/format.js";
 
 function fmtSec(s) {
   if (s == null) return "—";
@@ -33,6 +33,7 @@ export default function VisitedPages() {
         items={[
           "Most-visited paths from custom-tracked page_view events (Workers Analytics Engine), not Cloudflare request counts.",
           "Views = page_view events; Visitors = distinct visitor IDs that saw the path; Avg active = mean visible time on the page.",
+          "Sorted by NEWEST activity first (Last seen): a page that just got a view jumps to the top, and the order re-applies on every Live refresh.",
           "Avg time counts only ACTIVE (tab-visible) time - background/idle time is excluded. Scope follows the filter bar; times in IST. Rolling 30-day window.",
         ]}
       />
@@ -50,6 +51,7 @@ export default function VisitedPages() {
             { key: "views", label: "Views", align: "right", hint: "Number of page_view events for this path.", render: (r) => fmtNumber(r.views) },
             { key: "visitors", label: "Visitors", align: "right", hint: "Distinct visitor IDs that viewed this path.", render: (r) => fmtNumber(r.visitors) },
             { key: "avgSeconds", label: "Avg active", align: "right", hint: "Mean visible (tab-focused) time per view.", render: (r) => fmtSec(r.avgSeconds) },
+            { key: "lastSeen", label: "Last seen", hint: "Most recent view of this path (IST). Newest activity sits on top and bubbles up on Live refresh.", render: (r) => fmtDate(r.lastSeen) },
           ]}
           rows={rows}
         />

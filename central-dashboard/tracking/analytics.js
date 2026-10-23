@@ -22,7 +22,9 @@
  * finalize previous page -> page_duration -> navigation(from,to) -> new page_view.
  *
  * Anonymous only: random visitorId (localStorage) + sessionId (sessionStorage).
- * No cookies, no PII. Respects Do Not Track.
+ * No cookies, no PII. Respects Do Not Track. The browser/OS/device shown on the
+ * dashboard are derived server-side from navigator.userAgent sent in the payload
+ * (parsed to generic labels like "Chrome / Windows / Desktop" - no raw UA stored).
  */
 (function () {
   "use strict";
@@ -70,6 +72,7 @@
       path: extra.path != null ? extra.path : location.pathname,
       ref: extra.ref != null ? extra.ref : "",
       v: vid, s: sid, dur: extra.dur || 0, ts: Date.now(),
+      ua: navigator.userAgent || "", // server-side parsed -> browser/OS/device per user
     };
     var body = JSON.stringify(payload);
     try {

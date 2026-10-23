@@ -36,8 +36,10 @@ export default function Journey() {
         badge="custom tracked"
         items={[
           "Measured by the analytics.js script via Workers Analytics Engine - real visitor actions, NOT Cloudflare request counts.",
-          "Unique Visitors = distinct anonymous browser/device IDs; Sessions = grouped visits (a new one starts after 30 min idle); Page Views = page_view events.",
-          "Avg Active Time/Page counts only time the tab was visible; Pages/Session = page views ÷ sessions; Bounce Rate = single-page sessions.",
+          "UNIQUE USER definition: Unique Visitors = distinct anonymous browser/device IDs seen in the window. One person using Chrome + mobile Safari counts as 2 unique visitors; the same browser over many days still counts as 1. IDs are random and stored in that browser's localStorage - no names, cookies or PII.",
+          "Sessions = grouped visits from those users (a new one starts after 30 min idle); Page Views = page_view events (every opened page counts, including repeat views by the same user).",
+          "Avg Active Time/Page counts only time the tab was visible (the clock pauses when the tab is hidden); Pages/Session = page views ÷ sessions; Bounce Rate = share of sessions that viewed only one page.",
+          "To see WHICH pages each user travelled: open the Visitors page (per-user travel paths, visit by visit) or the Sessions page (per-visit path) - Navigation Flow shows the aggregate page→page movement of all users.",
           "Scope follows the filter bar (Account, Project, Domain). All times shown in India Standard Time (IST).",
           "Rolling 30-day window - tracked events older than that are outside the query range.",
         ]}
@@ -51,7 +53,7 @@ export default function Journey() {
         <Empty text="No tracked events yet. Install analytics.js on a site and complete Phase 0/1 verification, then data appears here." />
       ) : (
         <div className="stats">
-          <StatCard metric={{ available: d.uniqueVisitors != null, label: "Unique Visitors", value: d.uniqueVisitors }} hint="Distinct anonymous visitor IDs that viewed a page in the window." />
+          <StatCard metric={{ available: d.uniqueVisitors != null, label: "Unique Visitors", value: d.uniqueVisitors }} hint="Distinct anonymous browser/device IDs in the window. One person on two devices = two visitors (no identity tracking exists). Click through to the Visitors page for per-user details." />
           <StatCard metric={{ available: d.sessions != null, label: "Sessions", value: d.sessions }} hint="Grouped visits. A new session starts after 30 minutes of inactivity." />
           <StatCard metric={{ available: d.pageViews != null, label: "Page Views", value: d.pageViews }} hint="Total page_view events recorded." />
           <StatCard metric={{ available: d.avgTimeOnPage != null, label: "Avg Active Time / Page" }} valueLabel={fmtSec(d.avgTimeOnPage)} hint="Average visible (tab-focused) time per page. Idle/hidden time is excluded." />

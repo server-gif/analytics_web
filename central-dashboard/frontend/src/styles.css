@@ -699,6 +699,252 @@ td {
   margin-bottom: 18px;
 }
 
+/* ---- Custom-tracked (User Journey) user-wise display helpers ---- */
+/* Colored anonymous-user chip: same ID always gets the same hue, so a user is
+   visually recognizable across Visitors / Sessions / drill-downs. */
+.usercell {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.usercell .avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  flex: 0 0 auto;
+}
+
+.usercell code {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Page-to-page travel path: numbered chips with per-page active time. */
+.travelpath {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.travel-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #1b1430;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 9px;
+  font-size: 12.5px;
+  max-width: 340px;
+}
+
+.travel-step.click {
+  cursor: pointer;
+}
+
+.travel-step.click:hover {
+  border-color: var(--accent);
+}
+
+.travel-step .travel-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent2);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.travel-step .travel-path {
+  font-family: ui-monospace, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.travel-step .travel-time {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.travel-step.more {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.travel-arrow {
+  color: var(--muted);
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+
+/* ---- Users section: unique-user list + full per-user profile ---- */
+.usersearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.usersearch input {
+  flex: 1;
+  max-width: 420px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 7px 11px;
+  font-size: 13px;
+}
+
+.usersearch input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.backbtn {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+
+.backbtn:hover {
+  background: #241a3d;
+}
+
+.profile-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.profile-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-id .usercell .avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+
+.profile-id .usercell code {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.profile-badge {
+  margin-left: 0;
+}
+
+.profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.profile-meta b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* pages-visited table */
+.ppath {
+  font-size: 12.5px;
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.pmeta {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.pdom {
+  color: var(--text);
+  opacity: .7;
+}
+
+.timecol {
+  width: 180px;
+}
+
+.timebar {
+  display: block;
+  height: 8px;
+  border-radius: 5px;
+  background: #241a3d;
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.timebar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+}
+
+/* per-visit cards in the profile */
+.visitcard {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.visitcard:first-of-type {
+  border-top: none;
+}
+
+.visithead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.visithead .visitno {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.visithead .sub {
+  font-weight: 400;
+}
+
 .pagehead .pagetitle {
   margin-bottom: 0;
   display: flex;

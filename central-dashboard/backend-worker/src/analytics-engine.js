@@ -5,8 +5,10 @@
  * Locked schema (Phase 0 verified field order -> freeze):
  *   blob1 event | blob2 project | blob3 domain | blob4 path | blob5 referrer
  *   blob6 country | blob7 visitorId | blob8 sessionId
+ *   blob9 browser | blob10 os | blob11 device   (appended 2026-10: server-side
+ *   UA parsing in /api/track; rows written before this simply have '' -> "—")
  *   double1 duration(sec) | double2 client_timestamp(ms) | double3 count(=1)
- *   index -> blob8 (sessionId) for fast session drill-down
+ *   indexes -> blob8 (sessionId) + blob7 (visitorId) for fast drill-down
  *
  * AUTH: writeDataPoint() below is authorized by the [[analytics_engine_datasets]]
  * binding at deploy time and NEVER uses CF_API_TOKEN. Cloudflare has no
@@ -33,7 +35,8 @@ function blob(v) {
 
 /**
  * Write one event. `ev` = {event, project, domain, path, referrer, country,
- * visitorId, sessionId, duration, clientTs}. Returns true if dispatched.
+ * visitorId, sessionId, browser, os, device, duration, clientTs}. Returns true
+ * if dispatched.
  */
 export function writeEvent(env, ev) {
   if (!env.AE) {
@@ -46,9 +49,10 @@ export function writeEvent(env, ev) {
       blobs: [
         blob(ev.event), blob(ev.project), blob(ev.domain), blob(ev.path),
         blob(ev.referrer), blob(ev.country), blob(ev.visitorId), sessionId,
+        blob(ev.browser), blob(ev.os), blob(ev.device),
       ],
       doubles: [Number(ev.duration) || 0, Number(ev.clientTs) || 0, 1],
-      indexes: [sessionId || "none"], // single index only (AE limit)
+      indexes: [sessionId || "none", blob(ev.visitorId) || "none"], // AE allows up to 3
     });
     return true;
   } catch (err) {
@@ -106,11 +110,24 @@ async function runSql(env, sql) {
   return json.data || [];
 }
 
-// guard each query: failure -> null (UI shows Not available), never a fake 0
+// guard each query: failure -> null (UI shows Not available), never a fake 0.
+// The device columns (blob9/10/11) only exist once a new-format row has been
+// written; if a query errors on them, retry once WITHOUT those three selects so
+// the dashboard keeps working against an old-shaped dataset (the other columns -
+// double1/blob1 for `seconds` - have always existed, so they are never dropped).
 async function q(env, sql) {
   try {
     return await runSql(env, sql);
   } catch (err) {
+    if (/blob(9|10|11)/.test(sql)) {
+      const legacy = sql.replace(/\s*argMax\(blob(?:9|10|11), timestamp\) AS (?:browser|os|device),/g, "");
+      try {
+        return await runSql(env, legacy);
+      } catch (err2) {
+        console.error("[ae] query failed (device-less retry):", err2.message);
+        return null;
+      }
+    }
     console.error("[ae] query failed:", err.message);
     return null;
   }
@@ -198,17 +215,19 @@ export async function journeyOverview(env, opts) {
   };
 }
 
-/** Most-visited paths. */
+/** Most-visited paths, newest activity first (a path that just got a view
+ *  bubbles to the top and stays there as it accumulates views). */
 export async function topPages(env, opts) {
   const rows = await q(env, `
     SELECT
       blob4 AS path,
       countIf(blob1 = 'page_view') AS views,
       count(DISTINCT blob7) AS visitors,
-      avgIf(double1, blob1 = 'page_duration') AS avgSeconds
+      avgIf(double1, blob1 = 'page_duration') AS avgSeconds,
+      max(timestamp) AS lastSeen
     FROM ${DATASET} WHERE ${where(opts)}
     GROUP BY blob4 HAVING views > 0
-    ORDER BY views DESC LIMIT 50
+    ORDER BY lastSeen DESC LIMIT 50
   `);
   if (!rows) return null;
   return rows.map((r) => ({
@@ -216,6 +235,7 @@ export async function topPages(env, opts) {
     views: num(r.views),
     visitors: num(r.visitors),
     avgSeconds: r.avgSeconds == null ? null : num(r.avgSeconds),
+    lastSeen: r.lastSeen || null,
   }));
 }
 
@@ -245,19 +265,27 @@ export async function listSessions(env, opts) {
       argMax(blob7, timestamp) AS visitorId,
       argMax(blob6, timestamp) AS country,
       argMax(blob3, timestamp) AS domain,
+      argMax(blob9, timestamp) AS browser,
+      argMax(blob10, timestamp) AS os,
+      argMax(blob11, timestamp) AS device,
       min(timestamp) AS startedAt,
       max(timestamp) AS endedAt,
       countIf(blob1 = 'page_view') AS pageViews,
       sumIf(double1, blob1 = 'page_duration') AS seconds
     FROM ${DATASET} WHERE ${where(opts)} AND blob8 != ''
-    GROUP BY sessionId ORDER BY startedAt DESC LIMIT 100
+    GROUP BY sessionId ORDER BY endedAt DESC LIMIT 100
   `);
+  // ORDER BY endedAt (last activity), NOT startedAt: an ongoing session that
+  // keeps receiving events must stay/bubble to the top (newest activity first).
   if (!rows) return null;
   return rows.map((r) => ({
     sessionId: r.sessionId,
     visitorId: r.visitorId,
     country: r.country,
     domain: r.domain,
+    browser: r.browser || null,
+    os: r.os || null,
+    device: r.device || null,
     startedAt: r.startedAt,
     endedAt: r.endedAt,
     pageViews: num(r.pageViews),
@@ -272,7 +300,7 @@ export async function sessionDetail(env, opts, sessionId) {
   const w = where(opts);
   const rows = await q(env, `
     SELECT timestamp AS ts, blob1 AS event, blob4 AS path, blob3 AS domain,
-           double1 AS duration, double2 AS clientTs
+           blob5 AS referrer, double1 AS duration, double2 AS clientTs
     FROM ${DATASET} WHERE ${w} AND blob8 = ${sqlStr(id)}
     ORDER BY clientTs ASC, ts ASC LIMIT 500
   `);
@@ -285,6 +313,7 @@ export async function sessionDetail(env, opts, sessionId) {
       event: r.event,
       path: r.path,
       domain: r.domain,
+      referrer: r.referrer || "",
       duration: r.duration == null ? null : num(r.duration),
     })),
   };
@@ -301,9 +330,9 @@ export async function sessionDetail(env, opts, sessionId) {
  *  dropped, and pairs are re-aggregated in JS. */
 export async function navigationFlow(env, opts) {
   const rows = await q(env, `
-    SELECT blob5 AS referrer, blob4 AS path, count() AS transitions
+    SELECT blob5 AS referrer, blob4 AS path, count() AS transitions, max(timestamp) AS lastSeen
     FROM ${DATASET} WHERE ${where(opts)} AND blob1 = 'page_view' AND blob5 != ''
-    GROUP BY referrer, path ORDER BY transitions DESC LIMIT 300
+    GROUP BY referrer, path ORDER BY lastSeen DESC LIMIT 300
   `);
   if (!rows) return null;
   const agg = new Map();
@@ -312,26 +341,41 @@ export async function navigationFlow(env, opts) {
     const to = toPath(r.path);
     if (!from || !to || from === to) continue; // skip empty + same-page reloads
     const key = from + "\u0000" + to;
-    agg.set(key, (agg.get(key) || 0) + num(r.transitions));
+    const cur = agg.get(key) || { transitions: 0, lastSeen: null };
+    cur.transitions += num(r.transitions);
+    // keep the newest activity time for the pair. AE returns fixed-width
+    // "YYYY-MM-DD HH:MM:SS" timestamp strings, so a plain string comparison is
+    // chronological (no date parsing needed here, and it stays consistent with
+    // topPages/listSessions/listVisitors which all return the raw AE string).
+    const ls = r.lastSeen || null;
+    if (ls && (!cur.lastSeen || String(ls) > String(cur.lastSeen))) cur.lastSeen = ls;
+    agg.set(key, cur);
   }
   return [...agg.entries()]
-    .map(([k, transitions]) => {
+    .map(([k, v]) => {
       const i = k.indexOf("\u0000");
-      return { referrer: k.slice(0, i), path: k.slice(i + 1), transitions };
+      return { referrer: k.slice(0, i), path: k.slice(i + 1), transitions: v.transitions, lastSeen: v.lastSeen || null };
     })
-    .sort((a, b) => b.transitions - a.transitions)
+    .sort((a, b) => String(b.lastSeen || "").localeCompare(String(a.lastSeen || "")))
     .slice(0, 50);
 }
 
-/** Visitors list (for the individual-journey view). */
+/** Visitors list (for the individual-journey view). One row per unique user:
+ *  who they are (anonymous ID), what they used (browser/OS/device - from the
+ *  server-side UA parsing added in /api/track), how much they visited
+ *  (sessions / page views / total active time) and when (first/last seen). */
 export async function listVisitors(env, opts) {
   const rows = await q(env, `
     SELECT
       blob7 AS visitorId,
       argMax(blob6, timestamp) AS country,
       argMax(blob3, timestamp) AS domain,
+      argMax(blob9, timestamp) AS browser,
+      argMax(blob10, timestamp) AS os,
+      argMax(blob11, timestamp) AS device,
       count(DISTINCT blob8) AS sessions,
       countIf(blob1 = 'page_view') AS pageViews,
+      sumIf(double1, blob1 = 'page_duration') AS seconds,
       min(timestamp) AS firstSeen,
       max(timestamp) AS lastSeen
     FROM ${DATASET} WHERE ${where(opts)} AND blob7 != ''
@@ -342,8 +386,12 @@ export async function listVisitors(env, opts) {
     visitorId: r.visitorId,
     country: r.country,
     domain: r.domain,
+    browser: r.browser || null,
+    os: r.os || null,
+    device: r.device || null,
     sessions: num(r.sessions),
     pageViews: num(r.pageViews),
+    seconds: r.seconds == null ? null : num(r.seconds),
     firstSeen: r.firstSeen,
     lastSeen: r.lastSeen,
   }));
@@ -373,15 +421,20 @@ export async function trackedDomains(env, opts) {
     }));
 }
 
-/** Ordered events for one visitor across all their sessions (grouped client-side). */
+/** Ordered events for one visitor across all their sessions (grouped client-side).
+ *  Powers the per-user profile: carries project (blob2) + country (blob6) so the
+ *  UI can show which projects/domains this user touched and aggregate time per
+ *  page. Uses only long-stable columns (blob1-8/double1-2), so it needs no
+ *  device-column fallback. */
 export async function visitorJourney(env, opts, visitorId) {
   const id = safeVal(visitorId);
   if (!id) return { available: false, rows: null };
   const rows = await q(env, `
     SELECT timestamp AS ts, blob8 AS sessionId, blob1 AS event, blob4 AS path,
-           blob3 AS domain, double1 AS duration, double2 AS clientTs
+           blob3 AS domain, blob2 AS project, blob6 AS country, blob5 AS referrer,
+           double1 AS duration, double2 AS clientTs
     FROM ${DATASET} WHERE ${where(opts)} AND blob7 = ${sqlStr(id)}
-    ORDER BY clientTs ASC, ts ASC LIMIT 2000
+    ORDER BY clientTs ASC, ts ASC LIMIT 3000
   `);
   if (!rows) return { available: false, rows: null, visitorId: id };
   return {
@@ -393,6 +446,9 @@ export async function visitorJourney(env, opts, visitorId) {
       event: r.event,
       path: r.path,
       domain: r.domain,
+      project: r.project || "",
+      country: r.country || "",
+      referrer: r.referrer || "",
       duration: r.duration == null ? null : num(r.duration),
     })),
   };

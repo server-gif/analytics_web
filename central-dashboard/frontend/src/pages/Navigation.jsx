@@ -6,7 +6,7 @@ import DataTable from "../components/DataTable.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import { ErrorState, Empty } from "../components/StateViews.jsx";
 import { PageSkeleton } from "../components/Skeleton.jsx";
-import { fmtNumber } from "../lib/format.js";
+import { fmtNumber, fmtDate } from "../lib/format.js";
 
 // Page -> page transitions, from custom-tracked navigation events.
 export default function Navigation() {
@@ -27,6 +27,7 @@ export default function Navigation() {
         items={[
           "Page-to-page transitions derived from page-view referrers: the page a visitor came FROM -> the page they landed ON. Works for both traditional multi-page sites and SPAs.",
           "From = previous page; To = current page; Transitions = how often that step happened in the window. Same-page reloads are excluded.",
+          "Sorted by NEWEST activity first (Last seen): a transition that just happened jumps to the top, and the order re-applies on every Live refresh.",
           "Scope follows the filter bar (Account, Project, Domain). Rolling 30-day window.",
         ]}
       />
@@ -43,6 +44,7 @@ export default function Navigation() {
             { key: "referrer", label: "From (previous page)" },
             { key: "path", label: "To (page)" },
             { key: "transitions", label: "Transitions", align: "right", hint: "How many times users went From -> To in the window.", render: (r) => fmtNumber(r.transitions) },
+            { key: "lastSeen", label: "Last seen", hint: "Most recent time this step happened (IST). Newest activity sits on top and bubbles up on Live refresh.", render: (r) => fmtDate(r.lastSeen) },
           ]}
           rows={rows}
         />
