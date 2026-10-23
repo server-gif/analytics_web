@@ -8,7 +8,8 @@
  *   blob9 browser | blob10 os | blob11 device   (appended 2026-10: server-side
  *   UA parsing in /api/track; rows written before this simply have '' -> "—")
  *   double1 duration(sec) | double2 client_timestamp(ms) | double3 count(=1)
- *   indexes -> blob8 (sessionId) + blob7 (visitorId) for fast drill-down
+ *   indexes -> blob8 (sessionId) ONLY. AE caps this dataset at 1 index (fixed at
+ *   creation); visitorId (blob7) is queried directly, not indexed.
  *
  * AUTH: writeDataPoint() below is authorized by the [[analytics_engine_datasets]]
  * binding at deploy time and NEVER uses CF_API_TOKEN. Cloudflare has no
@@ -52,7 +53,12 @@ export function writeEvent(env, ev) {
         blob(ev.browser), blob(ev.os), blob(ev.device),
       ],
       doubles: [Number(ev.duration) || 0, Number(ev.clientTs) || 0, 1],
-      indexes: [sessionId || "none", blob(ev.visitorId) || "none"], // AE allows up to 3
+      // The user_journey dataset was created with a SINGLE index (sessionId).
+      // AE freezes a dataset's index count at first write and REJECTS any
+      // datapoint with more ("Maximum of 1 indexes supported"), so visitorId is
+      // NOT indexed here - visitor drill-down filters blob7 directly (still fast
+      // enough at this scale). Adding a 2nd index would need a brand-new dataset.
+      indexes: [sessionId || "none"],
     });
     return true;
   } catch (err) {
