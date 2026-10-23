@@ -10,6 +10,14 @@ import { PageSkeleton } from "../components/Skeleton.jsx";
 import { UserCell, TravelPath, deviceLabel, buildUserView, fmtDuration } from "../components/JourneyBits.jsx";
 import { fmtNumber, fmtDate } from "../lib/format.js";
 
+// Avg active time per page, matching the Journey overview exactly.
+function fmtSec(s) {
+  if (s == null) return "Not available";
+  const n = Math.round(s);
+  if (n < 60) return `${n}s`;
+  return `${Math.floor(n / 60)}m ${n % 60}s`;
+}
+
 // USERS section: one row per UNIQUE user; click a user to open their FULL
 // profile - the projects/domains they touched, the time they spent on EACH
 // page, every page they visited, and their page-to-page path per visit.
@@ -24,6 +32,10 @@ export default function Users() {
   const [query, setQuery] = useState("");
 
   const list = useApi(() => api.visitors(params), deps);
+  // Same custom-tracked overview the Journey page uses (unique visitors,
+  // sessions, page views, avg active time, pages/session, bounce rate) -
+  // scoped to the SAME filter bar as the user list below, so the numbers match.
+  const ov = useApi(() => api.journey(params), deps);
   // The profile is fetched UNFILTERED (all projects/domains, last 30 days) so
   // "all details" are complete regardless of the filter bar that found the user.
   const detail = useApi(
@@ -63,6 +75,16 @@ export default function Users() {
             "Sorted by NEWEST activity first (Last seen): a user who just did something jumps to the top, and the order re-applies on every Live refresh.",
           ]}
         />
+        {ov.data && !ov.loading && !ov.error && (
+          <div className="stats">
+            <StatCard metric={{ available: ov.data.uniqueVisitors != null, label: "Unique Visitors", value: ov.data.uniqueVisitors }} hint="Distinct anonymous browser/device IDs in the window. One person on two devices = two visitors. This is the number of rows in the list below." />
+            <StatCard metric={{ available: ov.data.sessions != null, label: "Sessions", value: ov.data.sessions }} hint="Grouped visits. A new session starts after 30 minutes of inactivity." />
+            <StatCard metric={{ available: ov.data.pageViews != null, label: "Page Views", value: ov.data.pageViews }} hint="Total page_view events recorded." />
+            <StatCard metric={{ available: ov.data.avgTimeOnPage != null, label: "Avg Active Time / Page" }} valueLabel={fmtSec(ov.data.avgTimeOnPage)} hint="Average visible (tab-focused) time per page. Idle/hidden time is excluded." />
+            <StatCard metric={{ available: ov.data.pagesPerSession != null, label: "Pages / Session" }} valueLabel={ov.data.pagesPerSession != null ? ov.data.pagesPerSession.toFixed(2) : "Not available"} hint="Page views divided by sessions." />
+            <StatCard metric={{ available: ov.data.bounceRate != null, label: "Bounce Rate" }} valueLabel={ov.data.bounceRate != null ? `${ov.data.bounceRate.toFixed(0)}%` : "Not available"} hint="Share of sessions that viewed only one page." />
+          </div>
+        )}
         <div className="usersearch">
           <input
             type="search"
